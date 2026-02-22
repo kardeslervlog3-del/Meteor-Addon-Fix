@@ -1,0 +1,74 @@
+name: Deep Auth Code Scan
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  deep-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch full history
+      
+      - name: Deep scan for auth code
+        run: |
+          echo "🔍 Performing deep scan of entire repository history..."
+          
+          FORBIDDEN_PATTERNS=(
+            "license\.txt"
+            "licenseEnc"
+            "licenseDec"
+            "Scrambler"
+            "HWID\.getHWID"
+            "Packets\.createPacket"
+            "com\.radium\.client\.security"
+            "46\.62\.150\.42"
+            "AUTH_REQ"
+            "AUTH_OK"
+            "AUTH_FAIL"
+            "SocketClient"
+            "EncryptionPipeline"
+            "lol\.lwes"
+          )
+          
+          FOUND=false
+          
+          # Scan all commits in history
+          echo "Scanning git history..."
+          for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
+            if git log --all --source --full-history -S "$pattern" --pretty=format:"%H %s" | head -1; then
+              echo "⚠️  Found pattern '$pattern' in git history"
+              FOUND=true
+            fi
+          done
+          
+          # Scan all files (including deleted)
+          echo "Scanning all files..."
+          for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
+            RESULTS=$(git grep -iE "$pattern" $(git rev-list --all) 2>/dev/null || true)
+            if [ -n "$RESULTS" ]; then
+              echo "⚠️  Found pattern '$pattern' in repository:"
+              echo "$RESULTS" | head -5
+              FOUND=true
+            fi
+          done
+          
+          # Check for forbidden directories in history
+          if git log --all --full-history --name-only --pretty=format: | grep -qE "^src/main/java/com/radium/client/security/"; then
+            echo "⚠️  Security folder found in git history"
+            FOUND=true
+          fi
+          
+          if [ "$FOUND" = true ]; then
+            echo ""
+            echo "⚠️  WARNING: Auth-related code found in repository history"
+            echo "This may be from old commits. Consider cleaning history if needed."
+            # Don't fail, just warn for historical data
+          else
+            echo "✅ No auth code found in repository history"
+          fi
+

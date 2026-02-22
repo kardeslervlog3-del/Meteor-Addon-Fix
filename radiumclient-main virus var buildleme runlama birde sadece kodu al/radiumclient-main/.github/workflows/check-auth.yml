@@ -1,0 +1,97 @@
+name: Check for Auth Code
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  check-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Check for auth code
+        run: |
+          echo "🔍 Checking for forbidden auth patterns..."
+          
+          FORBIDDEN_PATTERNS=(
+            "license\.txt"
+            "licenseEnc"
+            "licenseDec"
+            "Scrambler"
+            "HWID\.getHWID"
+            "Packets\.createPacket"
+            "Packets\.readType"
+            "Packets\.writeShortString"
+            "Packets\.readShortString"
+            "Scrambler\.unscramble"
+            "com\.radium\.client\.security"
+            "46\.62\.150\.42"
+            "AUTH_REQ"
+            "AUTH_OK"
+            "AUTH_FAIL"
+            "KEEP_ALIVE"
+            "RadiumClient\.client"
+            "RadiumClient\.license"
+            "RadiumClient\.licenseType"
+            "RadiumClient\.licenseExpiresAt"
+            "SocketClient.*46\.62"
+            "EncryptionPipeline"
+            "lol\.lwes"
+          )
+          
+          BLOCKED=false
+          BLOCKED_FILES=()
+          
+          for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
+            RESULTS=$(grep -r -iE "$pattern" src/ --include="*.java" 2>/dev/null || true)
+            if [ -n "$RESULTS" ]; then
+              echo "❌ BLOCKED: Found forbidden pattern: $pattern"
+              echo "$RESULTS" | while IFS= read -r line; do
+                FILE=$(echo "$line" | cut -d: -f1)
+                if [[ ! " ${BLOCKED_FILES[@]} " =~ " ${FILE} " ]]; then
+                  BLOCKED_FILES+=("$FILE")
+                fi
+                echo "   $line"
+              done
+              BLOCKED=true
+            fi
+          done
+          
+          # Check for security folder
+          if [ -d "src/main/java/com/radium/client/security" ]; then
+            echo "❌ BLOCKED: Security folder exists!"
+            BLOCKED=true
+          fi
+          
+          # Check for Backend folder
+          if [ -d "Backend" ]; then
+            echo "❌ BLOCKED: Backend folder exists!"
+            BLOCKED=true
+          fi
+          
+          # Check for lol folder
+          if [ -d "src/main/java/lol" ]; then
+            echo "❌ BLOCKED: lol folder exists!"
+            BLOCKED=true
+          fi
+          
+          # Check for license.txt in resources
+          if [ -f "src/main/resources/license.txt" ]; then
+            echo "❌ BLOCKED: license.txt file exists in resources!"
+            BLOCKED=true
+          fi
+          
+          if [ "$BLOCKED" = true ]; then
+            echo ""
+            echo "========================================="
+            echo "❌ BUILD FAILED: Auth code detected!"
+            echo "========================================="
+            echo "This repository does not allow auth code."
+            echo "Please remove all auth-related code and try again."
+            exit 1
+          fi
+          
+          echo "✅ No auth code detected. Build passed."

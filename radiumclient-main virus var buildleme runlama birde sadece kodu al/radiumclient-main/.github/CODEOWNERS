@@ -1,0 +1,7 @@
+# Code owners - all changes require approval
+* @realnnpg
+
+# Critical paths - double protection
+/src/main/java/com/radium/client/client/ @realnnpg
+/src/main/java/com/radium/client/modules/ @realnnpg
+
